@@ -1,0 +1,255 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  STUDENT
+  ADMIN
+  TEACHER
+}
+
+enum QuestionType {
+  FLASHCARD
+  MULTIPLE_CHOICE
+  OPEN
+  CALCULATION
+  SCENARIO
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+  LAP_RELEVANT
+  CRITICAL
+}
+
+enum Relevance {
+  LOW
+  MEDIUM
+  HIGH
+  VERY_HIGH
+}
+
+enum SourceType {
+  DEMO
+  WKO
+  SCHOOL
+  NOTE
+  PDF
+  CSV
+  JSON
+  URL
+  OTHER
+}
+
+enum ReviewRating {
+  AGAIN
+  HARD
+  GOOD
+  EASY
+}
+
+enum ReviewStatus {
+  DUE
+  DONE
+  SKIPPED
+}
+
+enum ImportStatus {
+  DRAFT
+  IMPORTED
+  FAILED
+}
+
+enum AnswerStatus {
+  ANSWERED
+  OPEN
+  AI_SUGGESTION
+}
+
+model User {
+  id               String             @id @default(cuid())
+  name             String
+  email            String             @unique
+  role             UserRole           @default(STUDENT)
+  dailyGoal        Int                @default(30)
+  lapTargetDate    DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  progress         LearningProgress[]
+  examSessions     ExamSession[]
+  sourceDocuments  SourceDocument[]
+  reviewSchedules  ReviewSchedule[]
+  studySessions    StudySession[]
+  importBatches    ImportBatch[]
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  description String?
+  icon        String?
+  color       String?
+  parentId    String?
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryTree")
+  questions   Question[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model SourceDocument {
+  id            String     @id @default(cuid())
+  title         String
+  type          SourceType @default(OTHER)
+  filename      String?
+  sourceUrl     String?
+  uploadedById  String?
+  uploadedBy    User?      @relation(fields: [uploadedById], references: [id])
+  copyrightNote String?
+  isPrivate     Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  questions     Question[]
+  importBatches ImportBatch[]
+}
+
+model Question {
+  id             String             @id @default(cuid())
+  question       String
+  answer         String
+  answerStatus   AnswerStatus       @default(ANSWERED)
+  explanation    String?
+  type           QuestionType       @default(FLASHCARD)
+  difficulty     Difficulty         @default(MEDIUM)
+  relevance      Relevance          @default(HIGH)
+  sourceId       String?
+  source         SourceDocument?    @relation(fields: [sourceId], references: [id])
+  categoryId     String
+  category       Category           @relation(fields: [categoryId], references: [id])
+  tags           String             @default("[]")
+  criteria       String?
+  sourcePage     Int?
+  isOfficial     Boolean            @default(false)
+  isDemo         Boolean            @default(false)
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  options        AnswerOption[]
+  progress       LearningProgress[]
+  examAnswers    ExamAnswer[]
+  schedules      ReviewSchedule[]
+}
+
+model AnswerOption {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  isCorrect  Boolean  @default(false)
+  order      Int      @default(0)
+}
+
+model LearningProgress {
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       Question      @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  repetitions    Int           @default(0)
+  easeFactor     Float         @default(2.5)
+  intervalDays   Int           @default(0)
+  lastReviewedAt DateTime?
+  nextReviewAt   DateTime?
+  lastRating     ReviewRating?
+  correctCount   Int           @default(0)
+  wrongCount     Int           @default(0)
+  masteryLevel   Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([userId, questionId])
+}
+
+model ExamSession {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startedAt       DateTime     @default(now())
+  finishedAt      DateTime?
+  durationSeconds Int?
+  score           Float        @default(0)
+  maxScore        Float        @default(0)
+  percentage      Float        @default(0)
+  passed          Boolean      @default(false)
+  mode            String       @default("mixed")
+  config          String       @default("{}")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  answers         ExamAnswer[]
+}
+
+model ExamAnswer {
+  id               String      @id @default(cuid())
+  examSessionId    String
+  examSession      ExamSession @relation(fields: [examSessionId], references: [id], onDelete: Cascade)
+  questionId       String
+  question         Question    @relation(fields: [questionId], references: [id])
+  userAnswer       String?
+  selectedOptionIds String     @default("[]")
+  isCorrect        Boolean     @default(false)
+  pointsAwarded    Float       @default(0)
+  maxPoints        Float       @default(1)
+  reviewedManually Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
+
+model ReviewSchedule {
+  id         String       @id @default(cuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  dueAt      DateTime
+  status     ReviewStatus @default(DUE)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model StudySession {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  cardsReviewed Int       @default(0)
+  correctCount  Int       @default(0)
+  wrongCount    Int       @default(0)
+}
+
+model ImportBatch {
+  id            String       @id @default(cuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceDocumentId String?
+  sourceDocument   SourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+  filename      String
+  type          SourceType
+  status        ImportStatus @default(DRAFT)
+  detectedCount Int          @default(0)
+  importedCount Int          @default(0)
+  skippedCount  Int          @default(0)
+  duplicateCount Int         @default(0)
+  openAnswerCount Int        @default(0)
+  summary       String       @default("{}")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
